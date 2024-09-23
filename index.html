@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenStreetMap Web App with Real-Time Location Updates</title>
+    <title>OpenStreetMap Debugging - Route Fix</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <!-- Leaflet Control Geocoder CSS -->
@@ -12,13 +12,33 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
     <style>
         #map {
-            height: 100vh;
+            height: 90vh;
             width: 100vw;
+        }
+        #controls {
+            height: 10vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #toggleButton {
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            opacity: 1; /* Button is always active */
+            pointer-events: auto; /* Make sure the button can be clicked */
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    <div id="controls">
+        <button id="toggleButton">View Route</button>
+    </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -28,12 +48,16 @@
     <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
     <script>
-        let map, userMarker, routingControl;
+        let map, userMarker, routingControl, currentLatLng;
         let isMapInitialized = false;  // Flag to prevent constant map centering
+        let routeBounds = null;        // Store the route bounds
+        let showingCurrentPosition = true; // Flag to track the toggle state
+        let routeFound = false;        // Track if a route has been found
 
-        // Function to initialize or update the map with the user's location
+        // Initialize the map with the user's location
         function initMap(lat, lon) {
-            // If the map doesn't exist yet, initialize it
+            currentLatLng = L.latLng(lat, lon); // Store user's current location
+
             if (!map) {
                 map = L.map('map').setView([lat, lon], 13);
 
@@ -48,69 +72,114 @@
                 }).on('markgeocode', function(e) {
                     const latlng = e.geocode.center;
                     map.setView(latlng, 13);
+                    console.log("Geocode result:", latlng);  // Log the search result
 
-                    // Add a marker for the searched location
+                    // Add marker at search location
                     L.marker(latlng).addTo(map).bindPopup('Search result: ' + e.geocode.name).openPopup();
 
-                    // Remove the previous route if there is one
+                    // Remove previous route if one exists
                     if (routingControl) {
                         map.removeControl(routingControl);
                     }
 
-                    // Create a new route from the user's location to the searched location
+                    // Create a new route from user's location to searched location
                     routingControl = L.Routing.control({
                         waypoints: [
-                            L.latLng(userMarker.getLatLng()),  // Start at the user's current location
-                            latlng                             // End at the searched location
+                            L.latLng(currentLatLng),  // Start at current location
+                            latlng                   // End at searched location
                         ],
                         routeWhileDragging: true
                     }).addTo(map);
+
+                    // Calculate route bounds manually based on waypoints
+                    routingControl.on('routesfound', function(e) {
+                        const routes = e.routes;
+                        if (routes.length > 0) {
+                            const waypoints = routes[0].waypoints.map(wp => wp.latLng);
+                            routeBounds = L.latLngBounds(waypoints);
+                            routeFound = true;  // Mark that a route has been found
+                            console.log("Route found. Route bounds:", routeBounds);  // Log the route bounds
+                        } else {
+                            console.log("No route found.");
+                            routeBounds = null;  // Ensure routeBounds is null if no route is found
+                            routeFound = false;  // Route was not found
+                        }
+                    });
+
+                    routingControl.on('routingerror', function(e) {
+                        console.error("Routing error:", e);
+                        routeBounds = null;  // Ensure routeBounds is null if there is a routing error
+                        routeFound = false;  // Mark the route as not found
+                    });
                 }).addTo(map);
             }
 
-            // If the user marker doesn't exist yet, create it
             if (!userMarker) {
                 userMarker = L.marker([lat, lon]).addTo(map).bindPopup('You are here!').openPopup();
             } else {
-                // If the marker exists, just update its position
                 userMarker.setLatLng([lat, lon]);
             }
 
-            // Only center the map the first time the location is retrieved
             if (!isMapInitialized) {
-                map.setView([lat, lon], 13);  // Center the map the first time
-                isMapInitialized = true;  // Mark the map as initialized
+                map.setView([lat, lon], 13);  // Center map initially
+                isMapInitialized = true;
             }
         }
 
-        // Use the Geolocation API to track the user's current position and update the map in real-time
+        // Toggle between current position view and route view
+        function toggleView() {
+            console.log("Toggle button clicked");
+
+            // Check for route bounds and make sure route was found
+            if (!routeBounds || !routeFound) {
+                console.log("No valid route to show.");
+                alert("No route to show. Please search for a destination.");
+                return;
+            }
+
+            // Toggle the view between route and current position
+            if (showingCurrentPosition) {
+                console.log("Switching to route view");
+                if (routeBounds) {
+                    map.fitBounds(routeBounds);  // Fit the map to the route bounds
+                    console.log("Map bounds set to:", routeBounds);
+                }
+                document.getElementById('toggleButton').textContent = "View Current Position";
+            } else {
+                console.log("Switching to current position view");
+                map.setView(currentLatLng, 13); // Center map on current location
+                document.getElementById('toggleButton').textContent = "View Route";
+            }
+
+            showingCurrentPosition = !showingCurrentPosition;
+        }
+
+        // Geolocation API to track the user's position and update in real-time
         if (navigator.geolocation) {
-            // Watch the user's position and update the map as they move
             navigator.geolocation.watchPosition(
                 function(position) {
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
-
-                    // Update the map and marker with the user's current position
-                    initMap(lat, lon);
+                    console.log("User position updated:", lat, lon);  // Log the user's position
+                    initMap(lat, lon); // Initialize or update map
                 },
                 function(error) {
                     alert("Failed to retrieve location: " + error.message);
-
-                    // Fallback: if geolocation fails, load the map at a default location (London)
-                    initMap(51.505, -0.09);
+                    initMap(51.505, -0.09); // Default to London
                 },
                 {
-                    enableHighAccuracy: true,  // Use GPS for higher accuracy
-                    maximumAge: 0,             // Prevent using old positions
-                    timeout: 10000             // Timeout if no position is found within 10 seconds
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 10000
                 }
             );
         } else {
             alert("Geolocation is not supported by this browser.");
-            // Fallback: if geolocation is not supported, load the map at a default location (London)
-            initMap(51.505, -0.09);
+            initMap(51.505, -0.09); // Default to London
         }
+
+        // Attach the toggle view functionality to the button
+        document.getElementById('toggleButton').addEventListener('click', toggleView);
     </script>
 </body>
 </html>
