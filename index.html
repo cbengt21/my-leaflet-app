@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenStreetMap Web App with Search and Routing</title>
+    <title>OpenStreetMap Web App with Real-Time Location Updates</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <!-- Leaflet Control Geocoder CSS -->
@@ -28,66 +28,84 @@
     <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
     <script>
-        // Initialize the map without centering it yet (waiting for geolocation)
-        const map = L.map('map');
+        let map, userMarker, routingControl;
 
-        // Load OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // Function to initialize the map with the user's location
+        function initMap(lat, lon) {
+            // If the map doesn't exist yet, initialize it
+            if (!map) {
+                map = L.map('map').setView([lat, lon], 13);
 
-        // Use the Geolocation API to get the user's precise GPS-based location
+                // Load OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                // Add the Leaflet Control Geocoder (Search Box)
+                var geocoder = L.Control.geocoder({
+                    defaultMarkGeocode: false
+                }).on('markgeocode', function(e) {
+                    const latlng = e.geocode.center;
+                    map.setView(latlng, 13);
+
+                    // Add a marker for the searched location
+                    L.marker(latlng).addTo(map).bindPopup('Search result: ' + e.geocode.name).openPopup();
+
+                    // Remove the previous route if there is one
+                    if (routingControl) {
+                        map.removeControl(routingControl);
+                    }
+
+                    // Create a new route from the user's location to the searched location
+                    routingControl = L.Routing.control({
+                        waypoints: [
+                            L.latLng(userMarker.getLatLng()),  // Start at the updated user's current location
+                            latlng                             // End at the searched location
+                        ],
+                        routeWhileDragging: true
+                    }).addTo(map);
+                }).addTo(map);
+            }
+
+            // If the user marker doesn't exist yet, create it
+            if (!userMarker) {
+                userMarker = L.marker([lat, lon]).addTo(map).bindPopup('You are here!').openPopup();
+            } else {
+                // If the marker exists, just update its position
+                userMarker.setLatLng([lat, lon]);
+            }
+
+            // Keep the map centered on the user's updated location
+            map.setView([lat, lon], map.getZoom());
+        }
+
+        // Use the Geolocation API to track the user's current position and update the map in real-time
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
+            // Watch the user's position and update the map as they move
+            navigator.geolocation.watchPosition(
                 function(position) {
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
 
-                    // Center the map on the user's GPS location
-                    map.setView([lat, lon], 13);
-
-                    // Add a marker at the user's location
-                    L.marker([lat, lon]).addTo(map).bindPopup('You are here!').openPopup();
-
-                    // Add Leaflet Control Geocoder (Search Box)
-                    const geocoder = L.Control.geocoder({
-                        defaultMarkGeocode: false
-                    }).on('markgeocode', function(e) {
-                        const latlng = e.geocode.center;
-                        map.setView(latlng, 13);
-
-                        // Add a marker for the searched location
-                        L.marker(latlng).addTo(map).bindPopup('Search result: ' + e.geocode.name).openPopup();
-
-                        // If routing already exists, remove the old route
-                        if (window.routingControl) {
-                            map.removeControl(window.routingControl);
-                        }
-
-                        // Create a route from the user's location to the searched location
-                        window.routingControl = L.Routing.control({
-                            waypoints: [
-                                L.latLng(lat, lon), // Start from the user's current location
-                                latlng              // End at the searched location
-                            ],
-                            routeWhileDragging: true
-                        }).addTo(map);
-                    }).addTo(map);
-
+                    // Update the map and marker with the user's current position
+                    initMap(lat, lon);
                 },
                 function(error) {
                     alert("Failed to retrieve location: " + error.message);
+
                     // Fallback: if geolocation fails, load the map at a default location (London)
-                    map.setView([51.505, -0.09], 13);
+                    initMap(51.505, -0.09);
                 },
                 {
-                    enableHighAccuracy: true // Request GPS-based high accuracy
+                    enableHighAccuracy: true,  // Use GPS for higher accuracy
+                    maximumAge: 0,             // Prevent using old positions
+                    timeout: 10000             // Timeout if no position is found within 10 seconds
                 }
             );
         } else {
             alert("Geolocation is not supported by this browser.");
             // Fallback: if geolocation is not supported, load the map at a default location (London)
-            map.setView([51.505, -0.09], 13);
+            initMap(51.505, -0.09);
         }
     </script>
 </body>
