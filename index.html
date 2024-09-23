@@ -3,9 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenStreetMap with Search and Routing</title>
+    <title>OpenStreetMap Web App with Search and Routing</title>
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <!-- Leaflet Control Geocoder CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <!-- Leaflet Routing Machine CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
     <style>
         #map {
             height: 100vh;
@@ -15,42 +19,24 @@
 </head>
 <body>
     <div id="map"></div>
-    
+
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Leaflet Control Geocoder JS -->
     <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
-    
+    <!-- Leaflet Routing Machine JS -->
+    <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+
     <script>
-        // Initialize Leaflet map
-        const map = L.map('map').setView([51.505, -0.09], 13);
+        // Initialize the map without centering it yet (waiting for geolocation)
+        const map = L.map('map');
 
         // Load OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Add the geocoder search control to the map
-        const geocoder = L.Control.geocoder({
-            defaultMarkGeocode: true
-        }).addTo(map);
-
-        // When a location is found, move the map and add a marker
-        geocoder.on('markgeocode', function(e) {
-            const bbox = e.geocode.bbox;
-            const poly = L.polygon([
-                [bbox.getSouthEast().lat, bbox.getSouthEast().lng],
-                [bbox.getNorthEast().lat, bbox.getNorthEast().lng],
-                [bbox.getNorthWest().lat, bbox.getNorthWest().lng],
-                [bbox.getSouthWest().lat, bbox.getSouthWest().lng]
-            ]).addTo(map);
-            map.fitBounds(poly.getBounds());
-
-            // Add a marker at the found location
-            L.marker(e.geocode.center).addTo(map)
-                .bindPopup(e.geocode.name)
-                .openPopup();
-        });
-
-        // Use the Geolocation API to get GPS-based location
+        // Use the Geolocation API to get the user's precise GPS-based location
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
@@ -60,13 +46,39 @@
                     // Center the map on the user's GPS location
                     map.setView([lat, lon], 13);
 
-                    // Add a marker for the user's location
-                    L.marker([lat, lon]).addTo(map)
-                        .bindPopup('You are here!')
-                        .openPopup();
+                    // Add a marker at the user's location
+                    L.marker([lat, lon]).addTo(map).bindPopup('You are here!').openPopup();
+
+                    // Add Leaflet Control Geocoder (Search Box)
+                    const geocoder = L.Control.geocoder({
+                        defaultMarkGeocode: false
+                    }).on('markgeocode', function(e) {
+                        const latlng = e.geocode.center;
+                        map.setView(latlng, 13);
+
+                        // Add a marker for the searched location
+                        L.marker(latlng).addTo(map).bindPopup('Search result: ' + e.geocode.name).openPopup();
+
+                        // If routing already exists, remove the old route
+                        if (window.routingControl) {
+                            map.removeControl(window.routingControl);
+                        }
+
+                        // Create a route from the user's location to the searched location
+                        window.routingControl = L.Routing.control({
+                            waypoints: [
+                                L.latLng(lat, lon), // Start from the user's current location
+                                latlng              // End at the searched location
+                            ],
+                            routeWhileDragging: true
+                        }).addTo(map);
+                    }).addTo(map);
+
                 },
                 function(error) {
                     alert("Failed to retrieve location: " + error.message);
+                    // Fallback: if geolocation fails, load the map at a default location (London)
+                    map.setView([51.505, -0.09], 13);
                 },
                 {
                     enableHighAccuracy: true // Request GPS-based high accuracy
@@ -74,6 +86,8 @@
             );
         } else {
             alert("Geolocation is not supported by this browser.");
+            // Fallback: if geolocation is not supported, load the map at a default location (London)
+            map.setView([51.505, -0.09], 13);
         }
     </script>
 </body>
