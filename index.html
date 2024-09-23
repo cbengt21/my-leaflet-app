@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenStreetMap Web App</title>
+    <title>OpenStreetMap with Search and Routing</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <style>
         #map {
             height: 100vh;
@@ -14,7 +15,10 @@
 </head>
 <body>
     <div id="map"></div>
+    
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+    
     <script>
         // Initialize Leaflet map
         const map = L.map('map').setView([51.505, -0.09], 13);
@@ -24,7 +28,29 @@
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
 
-        // Use the Geolocation API to get precise GPS-based location
+        // Add the geocoder search control to the map
+        const geocoder = L.Control.geocoder({
+            defaultMarkGeocode: true
+        }).addTo(map);
+
+        // When a location is found, move the map and add a marker
+        geocoder.on('markgeocode', function(e) {
+            const bbox = e.geocode.bbox;
+            const poly = L.polygon([
+                [bbox.getSouthEast().lat, bbox.getSouthEast().lng],
+                [bbox.getNorthEast().lat, bbox.getNorthEast().lng],
+                [bbox.getNorthWest().lat, bbox.getNorthWest().lng],
+                [bbox.getSouthWest().lat, bbox.getSouthWest().lng]
+            ]).addTo(map);
+            map.fitBounds(poly.getBounds());
+
+            // Add a marker at the found location
+            L.marker(e.geocode.center).addTo(map)
+                .bindPopup(e.geocode.name)
+                .openPopup();
+        });
+
+        // Use the Geolocation API to get GPS-based location
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
