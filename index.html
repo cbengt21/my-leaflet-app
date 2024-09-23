@@ -29,8 +29,9 @@
 
     <script>
         let map, userMarker, routingControl;
+        let isMapInitialized = false;  // Flag to prevent constant map centering
 
-        // Function to initialize the map with the user's location
+        // Function to initialize or update the map with the user's location
         function initMap(lat, lon) {
             // If the map doesn't exist yet, initialize it
             if (!map) {
@@ -42,7 +43,7 @@
                 }).addTo(map);
 
                 // Add the Leaflet Control Geocoder (Search Box)
-                var geocoder = L.Control.geocoder({
+                const geocoder = L.Control.geocoder({
                     defaultMarkGeocode: false
                 }).on('markgeocode', function(e) {
                     const latlng = e.geocode.center;
@@ -59,7 +60,7 @@
                     // Create a new route from the user's location to the searched location
                     routingControl = L.Routing.control({
                         waypoints: [
-                            L.latLng(userMarker.getLatLng()),  // Start at the updated user's current location
+                            L.latLng(userMarker.getLatLng()),  // Start at the user's current location
                             latlng                             // End at the searched location
                         ],
                         routeWhileDragging: true
@@ -75,8 +76,11 @@
                 userMarker.setLatLng([lat, lon]);
             }
 
-            // Keep the map centered on the user's updated location
-            map.setView([lat, lon], map.getZoom());
+            // Only center the map the first time the location is retrieved
+            if (!isMapInitialized) {
+                map.setView([lat, lon], 13);  // Center the map the first time
+                isMapInitialized = true;  // Mark the map as initialized
+            }
         }
 
         // Use the Geolocation API to track the user's current position and update the map in real-time
